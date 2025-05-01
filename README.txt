@@ -1,10 +1,10 @@
 ###########################################################################################################################
 
-This project develops a habitat suitability model for the Northern Goshawk (Accipiter gentilis) in the Tsetspa7 Forest 
-Licence Area of British Columbia's Lillooet River Valley, integrating LiDAR-derived forest structure data with Vegetation 
-Resource Inventory and environmental variables through MaxEnt modelling. Following comprehensive data preprocessing and 
-derivative creation, the analysis produces spatially-explicit habitat suitability maps that classify areas into suitability 
-levels to inform sustainable forest management practices and conservation planning for this forest-dependent raptor.
+This project develops a habitat suitability model for the Northern Goshawk in British Columbia's Lillooet River Valley, 
+integrating LiDAR-derived forest structure data with environmental variables through MaxEnt modelling, with a second model 
+incorporating synthetic occurrence points to address limited data availability. The analysis produces spatially-explicit 
+habitat suitability maps that classify areas into suitability levels, informing sustainable forest management practices 
+and conservation planning for this forest-dependent raptor.
 
 ###########################################################################################################################
 
