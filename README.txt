@@ -22,11 +22,12 @@ bodies in the habitat suitability models. LiDAR data was excluded due to large f
 ###########################################################################################################################
 
 Instructions:
-	1. Extract "tsetspa7.zip" to preferred location.
-	2. Install the following packages, if required: caret, dismo, dplyr, ggplot2, maxnet, pROC, raster, sf, sp, and MASS.
-	3. Open and run the following markdown notebooks in RStudio:
-       - "tsetspa7_model.Rmd" (original MaxEnt model)
-       - "tsetspa7_synthetic_model.Rmd" (synthetic MaxEnt model)
+	1. Download data from this link: 
+	2. Extract "tsetspa7.zip" to preferred location.
+	3. Install the following packages, if required: caret, dismo, dplyr, ggplot2, maxnet, pROC, raster, sf, sp, and MASS.
+	4. Open and run the following markdown notebooks in RStudio:
+       	- "tsetspa7_model.Rmd" (original MaxEnt model)
+       	- "tsetspa7_synthetic_model.Rmd" (synthetic MaxEnt model)
 
 ###########################################################################################################################
 
