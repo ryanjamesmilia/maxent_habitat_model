@@ -35,7 +35,8 @@ Project Directory:
    - tsetspa7_v2.Rmd - R Mardown notebook containing MaxEnt habitat suitability model.
    - tsetspa7_notes.docx: detailed project notes.
 2. maps/
-   - Habitat suitability maps
+   - tsetspa7_3-Level.pdf: 3-Level habitat suitability map.
+   - tsetspa7_5-Level.pdf: 5-Level habitat suitability map.
 3. tsetspa7_v2/
    - Data folder supporting R Markdown notebook
 -----------------------------------------------------------------------------------------------------------------------------
