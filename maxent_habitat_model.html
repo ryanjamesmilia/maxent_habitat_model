@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MaxEnt Habitat Model</title>
+  <link rel="stylesheet" href="style.css" />
+
+  <!-- Prism.js for syntax highlighting -->
+  <link href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-r.min.js"></script>
+
+  <style>
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      font-family: Arial, sans-serif;
+    }
+    /* Styling for code blocks to make them scrollable */
+    pre {
+      background-color: #f5f5f5;
+      padding: 15px;
+      border-radius: 5px;
+      overflow-y: auto;  /* Enables vertical scrolling */
+      max-height: 400px; /* Limits the height of the code block */
+      font-size: 10px;
+      line-height: 1.5;
+    }
+
+    code {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>MaxEnt Habitat Model</h1>
+    <p>This project developed a habitat suitability model for the Northern Goshawk (Accipiter gentilis) 
+      in the Tsetspa7 Forest Licence area, British Columbia, to support conservation efforts through advanced 
+      geospatial analysis. The study integrated Light Detection and Ranging (LiDAR), Vegetation Resource Inventory 
+      (VRI), and Geographic Information Systems (GIS) with Maximum Entropy (MaxEnt) modelling to identify critical 
+      habitat characteristics and predict high-suitability areas.
+    </p>
+
+    <h2>Background</h2>
+    <p>The Northern Goshawk (<i>Accipiter gentilis</i>) relies on mature and old-growth forests for nesting and foraging, 
+      making it vulnerable to habitat loss from logging and forest management practices. This project employed MaxEnt 
+      habitat suitability modeling to map critical habitat features in the Tsetspa7 Forest Licence area. By leveraging 
+      advanced geospatial techniques and GIS, the study produced detailed suitability maps to inform conservation and 
+      sustainable forest management.
+    </p>
+
+    <h2>Study Area</h2>
+    <p>The study area is the Tsetspa7 Forest Licence, located within the Sea to Sky Forest District. The project site 
+      is north of Harrison Lake, extending east of Golden Ears Provincial Park and southeast of Lillooet Lake, in the 
+      lower Lillooet River valley. Access to the area is via Duffey Lake Road (Highway 99) and the Lillooet River Forest 
+      Service Road (FSR). Figure 1 shows the geographic extent of the licence area.
+    </p>
+    <img src="assets/project_area.png" alt="Project Area" style="max-width: 100%; height: auto; border: 1px solid #ccc;">
+
+    <h2>Data Processing</h2>
+    <p>Environmental variables for the Northern Goshawk habitat suitability model were derived from LiDAR and VRI data. 
+      LiDAR data were processed to create two DEMs and DSMs, generating Canopy Height Models (CHMs) via the "LAS Dataset 
+      to Raster" and "Calculate Raster" tools. These were merged, reprojected to NAD 1983 UTM Zone 10N, and clipped to the 
+      project boundary. VRI data provided classification variables: Forest Type (Coniferous, Deciduous, Unknown), Crown 
+      Closure (Low, Medium, High), Stand Age (Young, Mature, Old Growth), and BEC Zone (High or Low Suitability). All 
+      variables were rasterized to 5m resolution for consistency.
+    </p>
+    <h3>Canopy Height Model</h3>
+    <img src="assets/chm.png" alt="Canopy Height Model" style="max-width: 100%; height: auto; border: 1px solid #ccc;">
+
+    <h3>BEC Suitability</h3>
+    <img src="assets/bec.png" alt="BEC Suitability" style="max-width: 100%; height: auto; border: 1px solid #ccc;">
+
+    <h2>MaxEnt Modelling</h2>
+    <p>Three MaxEnt models were developed in RStudio and documented in markdown notebooks. Model 1 (tsetspa7_model) used 12 
+      occurrence points, Model 2 (tsetspa7_synthetic_model) expanded to 212 points (200 synthetic). Model 3 (tsetspa7_model_v2) 
+      used 23 occurrence points and incorporated the full extent of available LiDAR data across the project area. All models 
+      balanced fit and predictive power, with regularization minimizing overfitting while preserving ecologically relevant 
+      patterns.
+    </p>
+
+    <h3>Code Snippet</h3>
+    <pre><code class="language-r">
+      ## Run the MaxEnt Model with Leave-One-Out Cross-Validation (LOOCV)
+      # Define predictors for MaxEnt
+      predictors_df_clean <- all_data_clean[, c("chm", "dem", "forest_type", "stand_age")]
+      presence_clean <- all_data_clean$presence
+      
+      # Leave-One-Out Cross-Validation (LOOCV)
+      set.seed(123)
+      loo_predictions <- numeric(23)
+      presence_idx <- which(all_data_clean$presence == 1)
+      
+      for (i in 1:23) {
+        test_idx <- presence_idx[i]
+        train_data <- all_data_clean[-test_idx, ]
+        test_data <- all_data_clean[test_idx, , drop = FALSE]
+        
+        predictors_train <- train_data[, c("bec_suitability", "chm", "dem", "forest_type", "stand_age")]
+        presence_train <- train_data$presence
+        predictors_test <- test_data[, c("bec_suitability", "chm", "dem", "forest_type", "stand_age")]
+        
+        maxent_model <- maxnet(
+          p = presence_train,
+          data = predictors_train,
+          regmult = 2, 
+          f = maxnet.formula(presence_train, predictors_train, classes = "l")
+        )
+        loo_predictions[i] <- predict(maxent_model, predictors_test, type = "logistic")
+      }
+      
+      # Train final model on all data
+      maxent_model <- maxnet(
+        p = presence_clean,
+        data = predictors_df_clean,
+        regmult = 2,
+        f = maxnet.formula(presence_clean, predictors_df_clean, classes = "l")
+      )
+    </code></pre>
+
+    <h3>Model Performance</h3>
+    <p>MaxEnt models were validated using a 70/30 train-test split, LOOCV, and K-Fold CV:</p>
+    <ul>
+      <li><strong>Model 1</strong> (12 points): LOOCV AUC = <strong>0.9182</strong>; limited by small dataset.</li>
+      <li><strong>Model 2</strong> (212 points): LOOCV AUC = <strong>0.9567</strong>, K-Fold AUC = <strong>0.9500</strong>; excellent generalization.</li>
+      <li><strong>Model 3</strong> (23 points): LOOCV AUC = <strong>0.8268</strong>, K-Fold AUC = <strong>0.8275</strong>; does not rely on synthetic data.</li>
+    </ul>
+
+    <h2>Habitat Suitability Maps</h2>
+    <p>The habitat suitability maps showed distinct spatial patterns for Northern Goshawk habitat across the Tsetspa7 Forest 
+      Licence area. Model 1, based on 12 points, predicted 38.58% high-suitability habitat but was influenced by limited data. 
+      Model 2, using 212 points (including synthetic data), produced a more balanced distribution with 18.44% high suitability. 
+      Model 3, using 23 original points and full LiDAR coverage, was the most conservative, identifying only 15.68% as high 
+      suitability but offering the most detailed spatial representation. Across models, suitability strongly aligned with BEC 
+      zone (CWH/MH), coniferous forest type, and mature/old-growth stands. The final map from Model 3 provides the 
+      most accurate delineation of potential habitat.
+    </p>
+
+    <h3>Final Habitat Suitability</h3>
+    <img src="assets/final_map.png" alt="Final Habitat Suitability" style="max-width: 100%; height: auto; border: 1px solid #ccc;">
+
+    <h2>Conclusion</h2>
+    <p>This project successfully developed habitat suitability models for the Northern Goshawk in the Tsetspa7 Forest Licence area through the integration 
+      of LiDAR, VRI, and MaxEnt modeling techniques. Among the three models developed, Model 3 emerged as the preferred approach despite its lower AUC (0.8275) 
+      compared to Models 1 and 2. Its preference stems from its utilization of comprehensive LiDAR coverage across the entire project area and its reliance on 
+      a larger set of original occurrence points (23), providing the most spatially complete and biologically relevant habitat characterization. The resulting 
+      suitability maps classify 15.68% of the study area as high suitability, 28.95% as medium suitability, and 55.37% as low suitability, offering a conservative 
+      but precise delineation of potential Northern Goshawk habitat. The methodology developed and insights gained aim to contribute to the long-term conservation 
+      of the Northern Goshawk in British Columbia, demonstrating the value of integrated geospatial analysis in species conservation efforts.
+    </p>
+
+    <div style="display: flex; align-items: center; gap: 20px; margin-top: 40px;">
+      <a href="https://github.com/ryanjamesmilia/maxent_habitat_model/raw/main/documents/tsetspa7_final_report.pdf" target="_blank">
+        <img src="https://github.com/ryanjamesmilia/maxent_habitat_model/raw/main/assets/final_report.png" 
+             alt="Tsetspa7 Final Report" 
+             style="width: 150px; border: 1px solid #ccc; box-shadow: 2px 2px 8px rgba(0,0,0,0.1);">
+      </a>
+      <div>
+        <h3>View/Download Final Report</h3>
+        <a href="https://github.com/ryanjamesmilia/maxent_habitat_model/raw/main/documents/tsetspa7_final_report.pdf" 
+           style="padding: 8px 16px; background-color: #2e7d32; color: white; text-decoration: none; border-radius: 5px;">
+          📄 Download PDF
+        </a>
+      </div>
+    </div>
+
+    <a href="https://github.com/ryanjamesmilia/maxent_habitat_model/tree/main" target="_blank">
+      Visit the MaxEnt Habitat Model Project on GitHub
+    </a>
+
+    <p><a href="index.html">← Back to Portfolio</a></p>
+  </div>
+</body>
+</html>
