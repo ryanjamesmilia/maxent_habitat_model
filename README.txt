@@ -23,7 +23,7 @@ bodies in the habitat suitability models. LiDAR data was excluded due to large f
 
 Instructions:
 	1. Download data from this link: "https://github.com/ryanjamesmilia/tsetspa7_habitat_model/releases/tag/v1".
-	2. Extract "tsetspa7.zip" to preferred location.
+	2. Extract "tsetspa7.zip" and "tsetspa7_v2.zip" to preferred location.
 	3. Install the following packages, if required: caret, dismo, dplyr, ggplot2, maxnet, pROC, raster, sf, sp, and MASS.
 	4. Open and run the following markdown notebooks in RStudio:
        	- "tsetspa7_model.Rmd" (original MaxEnt model)
