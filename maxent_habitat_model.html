@@ -114,7 +114,7 @@
         maxent_model <- maxnet(
           p = presence_train,
           data = predictors_train,
-          regmult = 4, 
+          regmult = 1, 
           f = maxnet.formula(presence_train, predictors_train, classes = "l")
         )
         loo_predictions[i] <- predict(maxent_model, predictors_test, type = "logistic")
@@ -124,7 +124,7 @@
       maxent_model <- maxnet(
         p = presence_clean,
         data = predictors_df_clean,
-        regmult = 4,
+        regmult = 1,
         f = maxnet.formula(presence_clean, predictors_df_clean, classes = "l")
       )
     </code></pre>
@@ -134,7 +134,7 @@
     <ul>
       <li><strong>Model 1</strong> (12 points): LOOCV AUC = <strong>0.9182</strong>; limited by small dataset.</li>
       <li><strong>Model 2</strong> (212 points): LOOCV AUC = <strong>0.9567</strong>, K-Fold AUC = <strong>0.9500</strong>; excellent generalization.</li>
-      <li><strong>Model 3</strong> (23 points): LOOCV AUC = <strong>0.8268</strong>, K-Fold AUC = <strong>0.8275</strong>; no synthetic data.</li>
+      <li><strong>Model 3</strong> (23 points): LOOCV AUC = <strong>0.8267</strong>, K-Fold AUC = <strong>0.8249</strong>; no synthetic data.</li>
     </ul>
 
     <h2>Habitat Suitability Maps</h2>
@@ -152,10 +152,10 @@
 
     <h2>Conclusion</h2>
     <p>This project successfully developed habitat suitability models for the Northern Goshawk in the Tsetspa7 Forest Licence area through the integration 
-      of LiDAR, VRI, and MaxEnt modeling techniques. Among the three models developed, Model 3 emerged as the preferred approach despite its lower AUC (0.8275) 
+      of LiDAR, VRI, and MaxEnt modeling techniques. Among the three models developed, Model 3 emerged as the preferred approach despite its lower AUC (0.8267) 
       compared to Models 1 and 2. Its preference stems from its utilization of comprehensive LiDAR coverage across the entire project area and its reliance on 
       a larger set of original occurrence points (23), providing the most spatially complete and biologically relevant habitat characterization. The resulting 
-      suitability maps classify 15.68% of the study area as high suitability, 28.95% as medium suitability, and 55.37% as low suitability, offering a conservative 
+      suitability map classifies 15.68% of the study area as high suitability, 28.95% as medium suitability, and 55.37% as low suitability, offering a conservative 
       but precise delineation of potential Northern Goshawk habitat. The methodology developed and insights gained aim to contribute to the long-term conservation 
       of the Northern Goshawk in British Columbia, demonstrating the value of integrated geospatial analysis in species conservation efforts.
     </p>
