@@ -72,7 +72,7 @@
     <h2>Data Processing</h2>
     <p>Environmental variables for the Northern Goshawk habitat suitability model were derived from LiDAR and VRI data. 
       LiDAR data was processed to create Digital Elevation Models (DEMs) and Canopy Height Models (CHMs). VRI data was classified 
-      into variables using python: Forest Type (Coniferous, Deciduous, Unknown), Crown Closure (Low, Medium, High), Stand 
+      into variables using Python: Forest Type (Coniferous, Deciduous, Unknown), Crown Closure (Low, Medium, High), Stand 
       Age (Young, Mature, Old Growth), and BEC Zone (High or Low Suitability). All variables were rasterized to 5m resolution 
       for consistency.
     </p>
@@ -114,7 +114,7 @@
         maxent_model <- maxnet(
           p = presence_train,
           data = predictors_train,
-          regmult = 2, 
+          regmult = 4, 
           f = maxnet.formula(presence_train, predictors_train, classes = "l")
         )
         loo_predictions[i] <- predict(maxent_model, predictors_test, type = "logistic")
@@ -124,7 +124,7 @@
       maxent_model <- maxnet(
         p = presence_clean,
         data = predictors_df_clean,
-        regmult = 2,
+        regmult = 4,
         f = maxnet.formula(presence_clean, predictors_df_clean, classes = "l")
       )
     </code></pre>
