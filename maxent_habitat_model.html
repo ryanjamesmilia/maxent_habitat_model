@@ -94,7 +94,7 @@
     <pre><code class="language-r">
       ## Run the MaxEnt Model with Leave-One-Out Cross-Validation (LOOCV)
       # Define predictors for MaxEnt
-      predictors_df_clean <- all_data_clean[, c("chm", "dem", "forest_type", "stand_age")]
+      predictors_df_clean <- all_data_clean[, c("bec_suitability","chm", "dem", "forest_type", "stand_age")]
       presence_clean <- all_data_clean$presence
       
       # Leave-One-Out Cross-Validation (LOOCV)
@@ -139,7 +139,7 @@
 
     <h2>Habitat Suitability Maps</h2>
     <p>The habitat suitability maps showed distinct spatial patterns for Northern Goshawk habitat across the Tsetspa7 Forest 
-      Licence area. Model 1, based on 12 points, predicted 38.58% high-suitability habitat but was influenced by limited data. 
+      Licence area. Model 1, based on 12 points, predicted 28.22% high-suitability habitat but was influenced by limited data. 
       Model 2, using 212 points (including synthetic data), produced a more balanced distribution with 18.44% high suitability. 
       Model 3, using 23 original points and full LiDAR coverage, was the most conservative, identifying only 15.68% as high 
       suitability but offering the most detailed spatial representation. Across models, suitability strongly aligned with 
