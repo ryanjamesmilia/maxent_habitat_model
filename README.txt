@@ -24,8 +24,7 @@ Instructions:
 	1. Download data from this link: "https://github.com/ryanjamesmilia/tsetspa7_habitat_model/releases/tag/v1".
 	2. Extract "tsetspa7_v2.zip" to preferred location.
 	3. Install the following packages, if required: caret, dismo, dplyr, ggplot2, maxnet, pROC, raster, and sf.
-	4. Open and run the following markdown notebook in RStudio:
-	- "tsetspa7_model_v2.Rmd" (updated MaxEnt model)
+	4. Open and run the markdown notebook in RStudio: "tsetspa7_model_v2.Rmd".
 
 #############################################################################################################################
 
