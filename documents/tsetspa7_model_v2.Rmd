@@ -1,0 +1,457 @@
+## Tsetspa7 MaxEnt Model v2
+## Author: Ryan Milia
+
+## Introduction
+
+This markdown notebook documents the process of building a MaxEnt species distribution model for the Tsetspa7 project. The primary goal of this 
+analysis is to predict the suitable habitat for the Northern Goshawk based on environmental variables and species occurrence data. This notebook 
+provides documentation of the workflow throughout the analysis, serving as a reference for the MaxEnt modeling process.
+
+## Steps:
+
+1. Load data and libraries
+2. Prepare data
+3. Run the MaxEnt model
+4. Evaluate the model
+5. Visualize and export results
+
+## 1. Load Data and Libraries
+```{r}
+# Load packages
+library(caret)        # Model training and validation
+library(dismo)        # Species distribution modeling
+library(dplyr)        # Data manipulation
+library(ggplot2)      # Visualization
+library(maxnet)       # MaxEnt modeling
+library(pROC)         # ROC and AUC calculation
+library(raster)       # Raster processing
+library(sf)           # Spatial data handling
+
+# Load species occurrence data (update to current file path)
+occurrence_data <- st_read("C:/Users/ryanj/Desktop/COGS/resources/RStudio/data/tsetspa7_v2/goshawk_values_original.shp")
+
+# Load environmental layers (update to current file path)
+# Find folders that contain a 'hdr.adf' file — this is usually the header of an ESRI GRID
+raster_folders <- list.dirs("C:/Users/ryanj/Desktop/COGS/resources/RStudio/data/tsetspa7_v2/", 
+                            full.names = TRUE, recursive = TRUE)
+
+# Only keep folders that contain a valid ESRI GRID raster (e.g., 'hdr.adf' is present)
+valid_rasters <- raster_folders[sapply(raster_folders, function(f) {
+  file.exists(file.path(f, "hdr.adf"))
+})]
+
+# Load using the folder name (NOT individual files)
+raster_list <- lapply(valid_rasters, function(f) {
+  tryCatch(raster(f), error = function(e) NULL)
+})
+
+# Remove any NULLs (failed loads)
+raster_list <- raster_list[!sapply(raster_list, is.null)]
+
+env_layers <- stack(raster_list)
+
+print(length(raster_list))  # Should be 5
+print(env_layers)           # Check how many layers are actually stacked
+
+
+# Assign names to match your environmental variables
+names(env_layers) <- c("bec_suitability", "chm", "dem", "forest_type", "stand_age")
+```
+
+## 2. Prepare Data
+```{r}
+# Clean occurrence data
+colnames(occurrence_data) <- tolower(colnames(occurrence_data))
+occurrence_data <- occurrence_data[, !duplicated(colnames(occurrence_data))]
+columns_to_remove <- c("name", "rastervalu", "folderpath", "symbolid", "altmode", 
+                       "base", "snippet", "popupinfo", "haslabel", "labelid")
+occurrence_data_clean <- occurrence_data[, !names(occurrence_data) %in% columns_to_remove]
+colnames(occurrence_data_clean)[colnames(occurrence_data_clean) == "bec_suitab"] <- "bec_suitability"
+colnames(occurrence_data_clean)[colnames(occurrence_data_clean) == "forest_typ"] <- "forest_type"
+colnames(occurrence_data_clean)[colnames(occurrence_data_clean) == "species_pr"] <- "presence"
+
+# Drop geometry and convert to numeric
+occurrence_data_clean <- st_drop_geometry(occurrence_data_clean)
+maxent_data_ready <- occurrence_data_clean %>%
+  mutate(across(everything(), as.numeric))
+print(head(maxent_data_ready))
+
+# Generate background points
+set.seed(42)
+bg_points <- randomPoints(env_layers, n = 5000)  
+bg_data <- as.data.frame(bg_points)
+colnames(bg_data) <- c("x", "y")
+bg_env <- extract(env_layers, bg_data)
+bg_env_df <- as.data.frame(bg_env)
+bg_data$presence <- 0
+bg_data <- cbind(bg_data, bg_env_df)
+
+# Include necessary columns for filtering
+bg_data <- bg_data[, c("x", "y", "bec_suitability", "chm", "dem", "forest_type", "stand_age", "presence")]
+
+print(colnames(bg_data))  # Verify columns
+print(nrow(bg_data))  # Verify number of points: should be ~50–100
+
+# Combine data, keeping key predictors
+common_cols <- c("x", "y", "bec_suitability", "chm", "dem", "forest_type", "stand_age", "presence")
+all_data_clean <- rbind(maxent_data_ready[, common_cols], bg_data[, common_cols])
+all_data_clean <- na.omit(all_data_clean)  # Remove any NAs
+print(table(all_data_clean$presence)) 
+
+# Extract additional variables for all data
+all_env <- extract(env_layers, all_data_clean[, c("x", "y")])
+all_data_clean <- cbind(all_data_clean, all_env)
+
+# Update predictors for correlation analysis
+predictors_df_clean <- all_data_clean[, c("bec_suitability", "chm", "dem", "forest_type", "stand_age")]
+
+# Correlation analysis
+cor_matrix <- cor(predictors_df_clean, use = "complete.obs")
+cat("Correlation Matrix:\n")
+print(cor_matrix)
+high_cor <- which(abs(cor_matrix) > 0.7 & abs(cor_matrix) < 1, arr.ind = TRUE)
+if (nrow(high_cor) > 0) {
+  cat("High correlations found:\n")
+  for (i in 1:nrow(high_cor)) {
+    cat(colnames(predictors_df_clean)[high_cor[i, 1]], "and", 
+        colnames(predictors_df_clean)[high_cor[i, 2]], "\n")
+  }
+}
+
+# Define predictors for MaxEnt
+predictors_df_clean <- all_data_clean[, c("bec_suitability", "chm", "dem", "forest_type", "stand_age")]
+presence_clean <- all_data_clean$presence
+
+# Check for NAs in chm and dem
+sum(is.na(all_data_clean$chm))
+sum(is.na(all_data_clean$dem))
+# Remove rows with NA values in chm or dem
+all_data_clean <- all_data_clean[!is.na(all_data_clean$chm) & !is.na(all_data_clean$dem), ]
+```
+
+## 3. Run the MaxEnt Model with LOOCV
+```{r}
+# Define predictors for MaxEnt
+predictors_df_clean <- all_data_clean[, c("bec_suitability", "chm", "dem", "forest_type", "stand_age")]
+presence_clean <- all_data_clean$presence
+
+# Leave-One-Out Cross-Validation (LOOCV)
+set.seed(123)
+loo_predictions <- numeric(23)
+presence_idx <- which(all_data_clean$presence == 1)
+
+for (i in 1:23) {
+  test_idx <- presence_idx[i]
+  train_data <- all_data_clean[-test_idx, ]
+  test_data <- all_data_clean[test_idx, , drop = FALSE]
+  
+  predictors_train <- train_data[, c("bec_suitability", "chm", "dem", "forest_type", "stand_age")]
+  presence_train <- train_data$presence
+  predictors_test <- test_data[, c("bec_suitability", "chm", "dem", "forest_type", "stand_age")]
+  
+  maxent_model <- maxnet(
+    p = presence_train,
+    data = predictors_train,
+    regmult = 1, 
+    f = maxnet.formula(presence_train, predictors_train, classes = "l")
+  )
+  loo_predictions[i] <- predict(maxent_model, predictors_test, type = "logistic")
+}
+
+# Train final model on all data
+maxent_model <- maxnet(
+  p = presence_clean,
+  data = predictors_df_clean,
+  regmult = 1,
+  f = maxnet.formula(presence_clean, predictors_df_clean, classes = "l")
+)
+```
+
+## 4. Evaluate the Model
+```{r}
+# 70/30 Split for testing overfitting
+set.seed(456)
+presence_idx <- which(all_data_clean$presence == 1)
+train_indices <- sample(presence_idx, round(length(presence_idx) * 0.7))
+test_indices <- setdiff(presence_idx, train_indices)
+
+# Training data
+train_data <- all_data_clean[-test_indices, ]
+
+# Test data
+test_presence <- all_data_clean[test_indices, , drop=FALSE]
+n_bg_available <- nrow(all_data_clean[all_data_clean$presence == 0, ])
+n_bg_sample <- min(100, n_bg_available) 
+test_bg <- all_data_clean[all_data_clean$presence == 0, ][sample(n_bg_available, n_bg_sample), ]
+test_data <- rbind(test_presence, test_bg)
+
+# Train model on training data
+split_model <- maxnet(
+  p = train_data$presence,
+  data = train_data[, c("bec_suitability", "chm", "dem", "forest_type", "stand_age")],
+  regmult = 1,
+  f = maxnet.formula(train_data$presence, train_data[, c("bec_suitability", "chm", "dem", "forest_type", "stand_age")], classes = "l")
+)
+
+# Predict on test data
+test_predictions <- predict(split_model, test_data[, c("bec_suitability", "chm", "dem", "forest_type", "stand_age")], type = "logistic")
+
+# Calculate accuracy metrics
+cat("\n70/30 Split Test Results:\n")
+cat("Test presence points:", nrow(test_presence), "\n")
+cat("Average prediction on test presence:", mean(test_predictions[1:nrow(test_presence)]), "\n")
+cat("Average prediction on test background:", mean(test_predictions[(nrow(test_presence) + 1):length(test_predictions)]), "\n")
+```
+
+```{r}
+# Calculate AUC and store predictions
+all_predictions <- rep(NA, nrow(all_data_clean))
+all_predictions[presence_idx] <- loo_predictions
+all_predictions[-presence_idx] <- predict(maxent_model, all_data_clean[-presence_idx, c("bec_suitability", "chm", "dem", "forest_type", "stand_age")], type = "logistic")
+roc_result <- roc(all_data_clean$presence, all_predictions)
+
+loo_results <- list(auc = auc(roc_result), predictions = all_predictions)
+cat("\nModel Evaluation Metrics:\n")
+print(paste("AUC (Area Under the Curve):", round(loo_results$auc, 4)))
+print(paste("Mean predicted suitability:", round(mean(loo_results$predictions, na.rm = TRUE), 4)))
+print(paste("Minimum predicted suitability:", round(min(loo_results$predictions, na.rm = TRUE), 4)))
+print(paste("Maximum predicted suitability:", round(max(loo_results$predictions, na.rm = TRUE), 4)))
+
+# Check mean suitability of the 12 original presence points from LOOCV
+cat("Mean suitability for presence points:", mean(loo_predictions), "\n")
+# Verify number of presence vs. background points in evaluation
+cat("Presence points:", sum(all_data_clean$presence), "Background points:", sum(!all_data_clean$presence), "\n")
+```
+
+```{r}
+# Perform 5-fold cross-validation
+set.seed(789)  # Ensure reproducibility
+n_folds <- 5
+presence_idx <- which(all_data_clean$presence == 1)
+background_idx <- which(all_data_clean$presence == 0)
+
+# Create stratified folds for presence points
+presence_folds <- createFolds(presence_idx, k = n_folds, list = TRUE, returnTrain = FALSE)
+# Randomly assign background points to folds
+background_folds <- split(sample(background_idx), rep(1:n_folds, length.out = length(background_idx)))
+
+# Initialize vectors to store predictions and metrics
+cv_predictions <- numeric(nrow(all_data_clean))
+cv_auc <- numeric(n_folds)
+cv_mean_presence <- numeric(n_folds)
+cv_mean_background <- numeric(n_folds)
+
+# Perform 5-fold CV
+for (i in 1:n_folds) {
+  # Define test and train indices
+  test_idx <- c(presence_folds[[i]], background_folds[[i]])
+  train_idx <- setdiff(1:nrow(all_data_clean), test_idx)
+  
+  # Split data
+  train_data <- all_data_clean[train_idx, ]
+  test_data <- all_data_clean[test_idx, ]
+  
+  # Define predictors and response
+  predictors_train <- train_data[, c("bec_suitability", "chm", "dem", "forest_type", "stand_age")]
+  presence_train <- train_data$presence
+  predictors_test <- test_data[, c("bec_suitability", "chm", "dem", "forest_type", "stand_age")]
+  presence_test <- test_data$presence
+  
+  # Train MaxEnt model
+  maxent_model <- maxnet(
+    p = presence_train,
+    data = predictors_train,
+    regmult = 1,
+    f = maxnet.formula(presence_train, predictors_train, classes = "l")
+  )
+  
+  # Predict on test fold
+  test_pred <- predict(maxent_model, predictors_test, type = "logistic")
+  cv_predictions[test_idx] <- test_pred
+  
+  # Compute AUC
+  roc_obj <- roc(presence_test, as.numeric(test_pred), quiet = TRUE)
+  cv_auc[i] <- auc(roc_obj)
+  
+  # Compute confusion matrix metrics (threshold = 0.4)
+  threshold <- 0.4
+  pred_classes <- factor(as.numeric(test_pred > threshold), levels = c(0, 1), labels = c("0", "1"))
+  actual_classes <- factor(as.numeric(presence_test), levels = c(0, 1), labels = c("0", "1"))
+  conf_mat <- confusionMatrix(pred_classes, actual_classes, positive = "1")
+  
+  # Store mean suitability for presence and background
+  cv_mean_presence[i] <- mean(test_pred[presence_test == 1], na.rm = TRUE)
+  cv_mean_background[i] <- mean(test_pred[presence_test == 0], na.rm = TRUE)
+}
+
+# Summarize results
+cat("\n5-Fold Cross-Validation Results:\n")
+cat("Average AUC:", round(mean(cv_auc, na.rm = TRUE), 4), "\n")
+cat("Average Mean Suitability (Presence):", round(mean(cv_mean_presence, na.rm = TRUE), 4), "\n")
+cat("Average Mean Suitability (Background):", round(mean(cv_mean_background, na.rm = TRUE), 4), "\n")
+
+# Store CV predictions for further analysis
+cv_results <- list(
+  auc = cv_auc,
+  mean_presence = cv_mean_presence,
+  mean_background = cv_mean_background,
+  predictions = cv_predictions
+)
+```
+
+## 5. Visualize and Export Results
+```{r}
+# Pull relevant layers
+stand_age <- env_layers[["stand_age"]]
+forest_type <- env_layers[["forest_type"]]
+bec_suitability <- env_layers[["bec_suitability"]]
+dem <- env_layers[["dem"]]
+chm <- env_layers[["chm"]]
+
+# Predict habitat suitability using MaxEnt
+suitability_map <- predict(
+  stack(bec_suitability, chm, dem, forest_type, stand_age),  # Include all training predictors
+  maxent_model, type = "logistic"
+)
+
+# Data mask
+stack_mask <- calc(stack(bec_suitability, stand_age, forest_type, dem, chm), fun = function(x) ifelse(all(!is.na(x)), 1, NA))
+
+# --- Classification Function (3-level) ---
+classify_habitat_3level <- function(stand, forest, bec, dem, chm, suitability) {
+  result <- rep(2, length(stand))  # default to Medium
+  high_idx <- which(
+    suitability >= 0.4 &
+    bec == 1 &
+    forest == 1 &
+    stand == 1 &
+    dem < 700 &
+    chm > 15
+  )
+  result[high_idx] <- 3
+  low_idx <- which(
+    bec == 0 |
+    forest == 0 |
+    stand == 3 |
+    dem > 900 |
+    chm < 10 |
+    suitability < 0.10
+  )
+  result[low_idx] <- 1
+  return(result)
+}
+
+# Apply function
+suitability_3level_vals <- classify_habitat_3level(
+  getValues(stand_age),
+  getValues(forest_type),
+  getValues(bec_suitability),
+  getValues(dem),
+  getValues(chm),
+  getValues(suitability_map)
+)
+
+# Assign to raster
+suitability_raster <- suitability_map
+values(suitability_raster) <- suitability_3level_vals
+suitability_raster <- mask(suitability_raster, stack_mask)
+
+# Label
+suitability_raster <- ratify(suitability_raster)
+levels(suitability_raster)[[1]] <- data.frame(
+  ID = c(1, 2, 3),
+  Suitability = c("Low", "Medium", "High")
+)
+
+# Export + Plot
+writeRaster(
+  suitability_raster,
+  "C:/Users/ryanj/Desktop/COGS/resources/RStudio/maps/suitability.tif",
+  format = "GTiff", overwrite = TRUE
+)
+```
+
+```{r}
+# --- Classification Function (5-level) ---
+classify_habitat_5level <- function(stand, forest, bec, dem, chm, suitability, base_class) {
+  result <- rep(3, length(stand))  # default to Medium
+
+  # Low split into Very Low + Low
+  low_idx <- which(base_class == 1)
+  very_low <- intersect(low_idx, which(suitability < 0.10 | dem > 1000 | chm < 10))
+  low <- setdiff(low_idx, very_low)
+  result[very_low] <- 1
+  result[low] <- 2
+
+  # Medium stays same
+  result[which(base_class == 2)] <- 3
+
+  # High split into High + Very High
+  high_idx <- which(base_class == 3)
+  very_high <- intersect(high_idx, which(
+    suitability >= 0.5 & dem < 700 & chm > 20
+  ))
+  high <- setdiff(high_idx, very_high)
+  result[high] <- 4
+  result[very_high] <- 5
+
+  return(result)
+}
+
+# Apply function
+suitability_5level_vals <- classify_habitat_5level(
+  getValues(stand_age),
+  getValues(forest_type),
+  getValues(bec_suitability),
+  getValues(dem),
+  getValues(chm),
+  getValues(suitability_map),
+  getValues(suitability_raster)
+)
+
+# Create clean raster from template (e.g., stand_age)
+detailed_raster <- raster(stand_age)
+values(detailed_raster) <- suitability_5level_vals
+detailed_raster <- mask(detailed_raster, stack_mask)
+detailed_raster <- ratify(detailed_raster)
+unique_ids <- sort(unique(na.omit(values(detailed_raster))))
+
+# Build a matching levels table
+levels(detailed_raster)[[1]] <- data.frame(
+  ID = unique_ids,
+  Suitability = c("Very Low", "Low", "Medium", "High", "Very High")[unique_ids]
+)
+
+# Export + Plot
+writeRaster(
+  detailed_raster,
+  "C:/Users/ryanj/Desktop/COGS/resources/RStudio/maps/suitability_detailed.tif",
+  format = "GTiff", overwrite = TRUE
+)
+par(mfrow = c(1, 2))
+plot(suitability_raster, main = "3-Level Classification")
+plot(detailed_raster, main = "5-Level Classification")
+par(mfrow = c(1, 1))
+``` 
+
+# Compare Area Distribution
+```{r}
+# Area in hectares
+area_3level_ha <- table(getValues(suitability_raster)) * prod(res(suitability_raster)) / 10000
+area_5level_ha <- table(getValues(detailed_raster)) * prod(res(detailed_raster)) / 10000
+
+area_3level_pct <- prop.table(area_3level_ha) * 100
+area_5level_pct <- prop.table(area_5level_ha) * 100
+
+cat("\nArea Distribution (3 levels):\n")
+for(i in 1:3) {
+  cat(levels(suitability_raster)[[1]]$Suitability[i], ": ",
+      round(area_3level_pct[i], 2), "% (", round(area_3level_ha[i], 2), " ha)\n", sep = "")
+}
+
+cat("\nArea Distribution (5 levels):\n")
+for(i in 1:5) {
+  cat(levels(detailed_raster)[[1]]$Suitability[i], ": ",
+      round(area_5level_pct[i], 2), "% (", round(area_5level_ha[i], 2), " ha)\n", sep = "")
+}
+```
