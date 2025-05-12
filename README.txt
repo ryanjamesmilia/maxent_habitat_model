@@ -31,7 +31,7 @@ Instructions:
 Project Directory:
 1. documents/
    - tsetspa7_final_report.pdf: final report.
-   - tsetspa7_v2.Rmd - R Mardown notebook containing MaxEnt habitat suitability model.
+   - tsetspa7_model_v2.Rmd - R Mardown notebook containing MaxEnt habitat suitability model.
    - tsetspa7_notes.docx: detailed project notes.
 2. maps/
    - tsetspa7_3-Level.pdf: 3-Level habitat suitability map.
