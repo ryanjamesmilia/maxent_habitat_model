@@ -92,41 +92,41 @@
 
     <h3>Code Snippet</h3>
     <pre><code class="language-r">
-      ## Run the MaxEnt Model with Leave-One-Out Cross-Validation (LOOCV)
-      # Define predictors for MaxEnt
-      predictors_df_clean <- all_data_clean[, c("bec_suitability","chm", "dem", "forest_type", "stand_age")]
-      presence_clean <- all_data_clean$presence
-      
-      # Leave-One-Out Cross-Validation (LOOCV)
-      set.seed(123)
-      loo_predictions <- numeric(23)
-      presence_idx <- which(all_data_clean$presence == 1)
-      
-      for (i in 1:23) {
-        test_idx <- presence_idx[i]
-        train_data <- all_data_clean[-test_idx, ]
-        test_data <- all_data_clean[test_idx, , drop = FALSE]
-        
-        predictors_train <- train_data[, c("bec_suitability", "chm", "dem", "forest_type", "stand_age")]
-        presence_train <- train_data$presence
-        predictors_test <- test_data[, c("bec_suitability", "chm", "dem", "forest_type", "stand_age")]
-        
-        maxent_model <- maxnet(
-          p = presence_train,
-          data = predictors_train,
-          regmult = 1, 
-          f = maxnet.formula(presence_train, predictors_train, classes = "l")
-        )
-        loo_predictions[i] <- predict(maxent_model, predictors_test, type = "logistic")
-      }
-      
-      # Train final model on all data
-      maxent_model <- maxnet(
-        p = presence_clean,
-        data = predictors_df_clean,
-        regmult = 1,
-        f = maxnet.formula(presence_clean, predictors_df_clean, classes = "l")
-      )
+## Run the MaxEnt Model with Leave-One-Out Cross-Validation (LOOCV)
+# Define predictors for MaxEnt
+predictors_df_clean <- all_data_clean[, c("bec_suitability","chm", "dem", "forest_type", "stand_age")]
+presence_clean <- all_data_clean$presence
+
+# Leave-One-Out Cross-Validation (LOOCV)
+set.seed(123)
+loo_predictions <- numeric(23)
+presence_idx <- which(all_data_clean$presence == 1)
+
+for (i in 1:23) {
+  test_idx <- presence_idx[i]
+  train_data <- all_data_clean[-test_idx, ]
+  test_data <- all_data_clean[test_idx, , drop = FALSE]
+  
+  predictors_train <- train_data[, c("bec_suitability", "chm", "dem", "forest_type", "stand_age")]
+  presence_train <- train_data$presence
+  predictors_test <- test_data[, c("bec_suitability", "chm", "dem", "forest_type", "stand_age")]
+  
+  maxent_model <- maxnet(
+    p = presence_train,
+    data = predictors_train,
+    regmult = 1, 
+    f = maxnet.formula(presence_train, predictors_train, classes = "l")
+  )
+  loo_predictions[i] <- predict(maxent_model, predictors_test, type = "logistic")
+}
+
+# Train final model on all data
+maxent_model <- maxnet(
+  p = presence_clean,
+  data = predictors_df_clean,
+  regmult = 1,
+  f = maxnet.formula(presence_clean, predictors_df_clean, classes = "l")
+)
     </code></pre>
 
     <h3>Model Performance</h3>
